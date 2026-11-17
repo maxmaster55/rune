@@ -160,6 +160,9 @@ pub(crate) trait AnyHost {
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, _cause: StartCause) {}
     fn wake_deadline(&self) -> Option<Instant> { None }
     fn resumed(&mut self, event_loop: &ActiveEventLoop);
+    /// Android: the native window was destroyed. Desktop loops don't send this. A host with no
+    /// surface of its own does nothing.
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {}
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: WakeEvent);
     fn owns(&self, id: WindowId) -> bool;
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent);
@@ -332,7 +335,12 @@ impl ApplicationHandler<WakeEvent> for Windows {
     }
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let _handling = crate::quit::handling();
-        let Some(factory) = self.factory.take() else { return };
+        let Some(factory) = self.factory.take() else {
+            // Android destroys and recreates the native window. The hosts already exist.
+            #[cfg(target_os = "android")]
+            for host in self.hosts.iter_mut().flatten() { host.resumed(event_loop); }
+            return;
+        };
         crate::marks::mark("loop.resumed");
         let primary = event_loop.primary_monitor();
         let displays: Vec<_> = event_loop.available_monitors().map(|m| Display {
@@ -366,6 +374,10 @@ impl ApplicationHandler<WakeEvent> for Windows {
         // A window opened at launch took it; a GPU kept for a later one would sit idle until then.
         crate::render::discard_prewarm();
         self.cleanup(event_loop);
+    }
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        let _handling = crate::quit::handling();
+        for host in self.hosts.iter_mut().flatten() { host.suspended(event_loop); }
     }
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: WakeEvent) {
         let _handling = crate::quit::handling();
@@ -546,6 +558,9 @@ struct Host<S: 'static> {
     present_log: Option<Arc<crate::frame::present_time::metal::Log>>,
     #[cfg(target_os = "macos")]
     frame_wake: Waker,
+    /// Android: whether the activity has a native window (`android_lifecycle`).
+    #[cfg(target_os = "android")]
+    activity: crate::platform::android_lifecycle::Surface,
 }
 
 impl<S: 'static> Host<S> {
@@ -698,6 +713,8 @@ impl<S: 'static> Host<S> {
             present_log,
             #[cfg(target_os = "macos")]
             frame_wake: Arc::new(move || { let _ = frame_proxy.send_event(WakeEvent::DisplayTick(slot)); }),
+            #[cfg(target_os = "android")]
+            activity: crate::platform::android_lifecycle::Surface::Absent,
         }
     }
 }

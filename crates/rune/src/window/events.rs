@@ -5,7 +5,13 @@ use super::*;
 
 impl<S: 'static> Host<S> {
     pub(super) fn resume(&mut self, event_loop: &ActiveEventLoop) {
+        // Android: a later resume is a new native window. A window that was showing comes back.
+        #[cfg(target_os = "android")]
+        let restore = crate::platform::android_lifecycle::step(&mut self.activity, crate::platform::android_lifecycle::Event::Created)
+            .into_iter().any(|effect| effect == crate::platform::android_lifecycle::Effect::RestoreWindow);
         if self.started {
+            #[cfg(target_os = "android")]
+            if restore && !self.life.finished() { self.open(event_loop, None); }
             return;
         }
         // Updates queued before launch (the link that launched the app) show in the first frame.
@@ -18,6 +24,25 @@ impl<S: 'static> Host<S> {
         }
         self.started = true;
         self.drain(event_loop, false);
+    }
+
+    /// Android `suspended`: the native window is gone. Drop the winit window and its surface
+    /// when the machine says so. The runtime and the GPU device stay. A finger still down is
+    /// cancelled. Elsewhere there is no such event.
+    pub(super) fn release_surface(&mut self, _event_loop: &ActiveEventLoop) {
+        #[cfg(target_os = "android")]
+        {
+            let showing = self.life.shown();
+            let drop_window = crate::platform::android_lifecycle::step(&mut self.activity, crate::platform::android_lifecycle::Event::Destroyed { showing })
+                .into_iter().any(|effect| effect == crate::platform::android_lifecycle::Effect::DropWindow);
+            if !drop_window { return; }
+            self.rt.cancel_touch();
+            self.stop_showing();
+            self.wind_down();
+            self.win = None;
+            self.native_handle.native.ready.store(false, std::sync::atomic::Ordering::Release);
+            self.native_handle.native.number.store(0, std::sync::atomic::Ordering::Release);
+        }
     }
 
     /// A hidden window delivers queued input without drawing, such as the releases of the

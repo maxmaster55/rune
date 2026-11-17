@@ -1,0 +1,31 @@
+[package]
+name = "android-hello"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+description = "The hello example as an Android activity. Desktop builds compile the view and its tests; the activity entry is Android-only."
+
+[lib]
+# NativeActivity loads `libmain.so` (`android.app.lib_name`). The rlib is what the desktop tests link.
+name = "main"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rune = { path = "../../crates/rune" }
+
+# `cargo apk` reads this. `cargo ndk` / `cargo build --target` do not need it.
+[package.metadata.android]
+package = "dev.rune.android_hello"
+apk_name = "android-hello"
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 29
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "Rune Hello"
+icon = "@android:drawable/sym_def_app_icon"
+
+[lints]
+workspace = true

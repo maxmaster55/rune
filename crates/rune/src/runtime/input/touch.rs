@@ -88,6 +88,14 @@ impl<S: 'static> Runtime<S> {
         self.touch.finger.is_some()
     }
 
+    /// The surface went away under a finger. End it as a cancel, so the press does not stay
+    /// down waiting for a lift that will not arrive.
+    pub(crate) fn cancel_touch(&mut self) {
+        let Some(f) = self.touch.finger.as_ref() else { return };
+        let (id, x, y, time) = (f.id, f.origin.0, f.origin.1, f.at);
+        self.touch_up(id, x, y, time, true);
+    }
+
     fn touch_down(&mut self, id: u64, x: f32, y: f32, time: f64) {
         if self.touch.finger.is_some() { return; }
         let scroll = self.touch_scroll_start(x, y);
@@ -220,6 +228,18 @@ mod tests {
         assert_eq!(rt.state.taps, [0]);
         assert_eq!(rt.pointer(), None);
         assert!(!rt.touching());
+    }
+
+    #[test]
+    fn a_cancelled_touch_clicks_nothing_and_lifts_the_finger() {
+        let mut rt = rig();
+        rt.touch(1, TouchPhase::Started, 100.0, 70.0, 0.0);
+        assert!(rt.touching());
+        rt.cancel_touch();
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.taps.is_empty(), "a cancel is not a click");
+        assert!(!rt.touching());
+        assert_eq!(rt.pointer(), None);
     }
 
     #[test]

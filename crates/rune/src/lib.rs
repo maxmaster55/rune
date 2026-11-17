@@ -226,6 +226,9 @@ pub use overlay::options::OverlaySupport;
 pub use pixels::Pixels;
 pub use platform::accent::SystemAccent;
 pub use platform::accent::system_accent;
+/// Android: bind the activity in `android_main`, then [`run`](crate::run). `research/40-android.md`.
+#[cfg(target_os = "android")]
+pub use platform::android;
 pub use platform::app_icon::set_app_icon;
 pub use platform::preferences::SystemContrast;
 /// Windows: raises this process's threads whose name passes the filter to a priority floor, walking
