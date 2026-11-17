@@ -65,6 +65,12 @@ fn run_configured(factory: Factory, args: Args, accessory: bool) -> Result<(), S
     crate::render::prewarm_gpu();
     #[allow(unused_mut)]
     let mut builder = EventLoop::<WakeEvent>::with_user_event();
+    #[cfg(target_os = "android")]
+    {
+        use winit::platform::android::EventLoopBuilderExtAndroid;
+        let app = crate::platform::android::app().ok_or("event loop: no Android activity; call rune::android::bind from android_main before rune::run")?;
+        builder.with_android_app(app);
+    }
     #[cfg(target_os = "macos")]
     // `RUNE_OPEN_INACTIVE` (a tool's launch): the app doesn't take activation at launch either.
     if accessory || std::env::var_os("RUNE_OPEN_INACTIVE").is_some() {
