@@ -150,13 +150,62 @@ pub struct EventLoop<T: 'static> {
 }
 
 /// The night mode of the activity's configuration as winit's theme; None when it is undefined.
+///
+/// Read from the activity's `Resources` over JNI. `AndroidApp::config()` is copied from the
+/// `AssetManager` the activity started with, and a night-mode change while the activity runs
+/// gives it new resources rather than updating that one, so the copy keeps the launch value.
 fn config_theme(app: &AndroidApp) -> Option<Theme> {
     use android_activity::ndk::configuration::UiModeNight;
+    if let Some(theme) = java_theme(app) {
+        return theme;
+    }
     match app.config().ui_mode_night() {
         UiModeNight::Yes => Some(Theme::Dark),
         UiModeNight::No => Some(Theme::Light),
         _ => None,
     }
+}
+
+/// `getResources().getConfiguration().uiMode & UI_MODE_NIGHT_MASK`; None when the call fails.
+fn java_theme(app: &AndroidApp) -> Option<Option<Theme>> {
+    use jni::objects::JObject;
+    use jni::{jni_sig, jni_str};
+    let activity = app.activity_as_ptr() as jni::sys::jobject;
+    if activity.is_null() {
+        return None;
+    }
+    // SAFETY: the pointer is the process's `JavaVM`, which outlives the activity.
+    let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr().cast()) };
+    let ui_mode = vm
+        .attach_current_thread(|env| -> jni::errors::Result<i32> {
+            // SAFETY: a global reference `AndroidApp` holds while the activity exists.
+            let activity = unsafe { env.as_cast_raw::<JObject<'_>>(&activity)? };
+            let resources = env
+                .call_method(
+                    &*activity,
+                    jni_str!("getResources"),
+                    jni_sig!(() -> android.content.res.Resources),
+                    &[],
+                )?
+                .l()?;
+            let config = env
+                .call_method(
+                    &resources,
+                    jni_str!("getConfiguration"),
+                    jni_sig!(() -> android.content.res.Configuration),
+                    &[],
+                )?
+                .l()?;
+            env.get_field(&config, jni_str!("uiMode"), jni_sig!("I"))?.i()
+        })
+        .map_err(|err| warn!("uiMode over JNI: {err:?}"))
+        .ok()?;
+    // Configuration.UI_MODE_NIGHT_MASK, _NO and _YES.
+    Some(match ui_mode & 0x30 {
+        0x20 => Some(Theme::Dark),
+        0x10 => Some(Theme::Light),
+        _ => None,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -462,6 +511,10 @@ impl<T: 'static> EventLoop<T> {
                     {
                         input_status = InputStatus::Unhandled
                     },
+                    // Back goes to the activity, which finishes as any Android app does on
+                    // Back. Handled here, it never reached the activity and the app could not
+                    // be left. An app that wants Back needs a way to claim it first.
+                    Keycode::Back => input_status = InputStatus::Unhandled,
                     keycode => {
                         let state = match key.action() {
                             KeyAction::Down => event::ElementState::Pressed,
