@@ -22,6 +22,7 @@ members = [
     "themes/opencode",
     "examples/hello",
     "examples/android-hello",
+    "examples/android-demo",
     "examples/web-hello",
     "examples/web-showcase",
     "www/app",

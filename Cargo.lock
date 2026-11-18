@@ -138,6 +138,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "android-demo"
+version = "0.0.1"
+dependencies = [
+ "rune",
+]
+
+[[package]]
 name = "android-hello"
 version = "0.0.1"
 dependencies = [
@@ -5728,6 +5735,7 @@ dependencies = [
  "core-graphics",
  "cursor-icon",
  "dpi",
+ "jni",
  "js-sys",
  "libc",
  "memmap2",
