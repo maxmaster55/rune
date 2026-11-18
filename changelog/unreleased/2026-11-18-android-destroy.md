@@ -1,0 +1,1 @@
+- Android: an app no longer hangs when its activity is destroyed. The vendored winit now ends the event loop on `onDestroy`, so `android_main` returns and `NativeActivity.onDestroy`, which waits for it, can finish. `examples/android-demo` is a tap counter with a dark-mode switch, checked on an Android 13 x86_64 emulator.

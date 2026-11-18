@@ -396,7 +396,7 @@ index 6d60c1c5..b6713efc 100644
      }
  }
 diff --git a/src/platform_impl/android/mod.rs b/src/platform_impl/android/mod.rs
-index c6a7416..3edffb2 100644
+index c6a7416..5eb122b 100644
 --- a/src/platform_impl/android/mod.rs
 +++ b/src/platform_impl/android/mod.rs
 @@ -143,6 +143,20 @@ pub struct EventLoop<T: 'static> {
@@ -454,7 +454,21 @@ index c6a7416..3edffb2 100644
                          let new_inner_size = Arc::new(Mutex::new(
                              MonitorHandle::new(self.android_app.clone()).size(),
                          ));
-@@ -1030,7 +1058,7 @@ impl Window {
+@@ -287,9 +315,10 @@ impl<T: 'static> EventLoop<T> {
+                     warn!("TODO: forward onStop notification to application");
+                 },
+                 MainEvent::Destroy => {
+-                    // XXX: maybe exit mainloop to drop things before being
+-                    // killed by the OS?
+-                    warn!("TODO: forward onDestroy notification to application");
++                    // `NativeActivity.onDestroy` blocks the Java main thread until
++                    // `android_main` returns, so the loop has to end here or the app hangs.
++                    debug!("App Destroyed - exiting the event loop");
++                    self.window_target.p.exit();
+                 },
+                 MainEvent::InsetsChanged { .. } => {
+                     // XXX: how to forward this state to applications?
+@@ -1030,7 +1059,7 @@ impl Window {
      pub fn set_theme(&self, _theme: Option<Theme>) {}
  
      pub fn theme(&self) -> Option<Theme> {

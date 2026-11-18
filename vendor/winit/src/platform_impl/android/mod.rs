@@ -315,9 +315,10 @@ impl<T: 'static> EventLoop<T> {
                     warn!("TODO: forward onStop notification to application");
                 },
                 MainEvent::Destroy => {
-                    // XXX: maybe exit mainloop to drop things before being
-                    // killed by the OS?
-                    warn!("TODO: forward onDestroy notification to application");
+                    // `NativeActivity.onDestroy` blocks the Java main thread until
+                    // `android_main` returns, so the loop has to end here or the app hangs.
+                    debug!("App Destroyed - exiting the event loop");
+                    self.window_target.p.exit();
                 },
                 MainEvent::InsetsChanged { .. } => {
                     // XXX: how to forward this state to applications?
