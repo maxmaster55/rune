@@ -4,25 +4,29 @@
 //! None is touched at launch: a system font loads the first time a text has a character the
 //! app's own fonts lack (`TextSystem::load_fallbacks`). The platform's own fallback names the
 //! font and its files, as browsers ask it: DirectWrite on Windows (`direct_write`), CoreText on
-//! Apple platforms (`core_text`), fontconfig in process elsewhere (`fontconfig`). No font
-//! folder is walked and no process is started.
+//! Apple platforms (`core_text`), the NDK's font matcher on Android (`android`), fontconfig in
+//! process elsewhere (`fontconfig`). No font folder is walked and no process is started.
 
 use super::*;
 
+#[cfg(any(target_os = "android", test))]
+mod android;
 #[cfg(target_vendor = "apple")]
 mod core_text;
 #[cfg(windows)]
 mod direct_write;
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
 mod fontconfig;
+#[cfg(target_os = "android")]
+use android as platform;
 #[cfg(target_vendor = "apple")]
 use core_text as platform;
 #[cfg(windows)]
 use direct_write as platform;
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
 use fontconfig as platform;
-/// Android and the web: no system fonts to ask.
-#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+/// The web: no system fonts to ask.
+#[cfg(target_arch = "wasm32")]
 mod platform {
     pub(super) fn family_files(_: &[&str]) -> Vec<std::path::PathBuf> { Vec::new() }
     pub(super) fn fallback_family_files(_: &[char], _: Option<&str>) -> Vec<std::path::PathBuf> { Vec::new() }
@@ -44,11 +48,16 @@ pub(super) const SYMBOL_FONT_FILES: &[&str] = &["sfnsttf", "sfnsitalic", "apples
 #[cfg(windows)]
 pub(super) const SYMBOL_FAMILIES: &[&str] = &["Segoe UI Emoji"];
 // DejaVu Sans lacks ⎋ (U+238B), which DejaVu Sans Mono has; `dejavusans` loads both files.
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(any(target_vendor = "apple", windows, target_os = "android")))]
 pub(super) const SYMBOL_FAMILIES: &[&str] =
     &["DejaVu Sans", "Noto Sans Symbols2", "Noto Sans Symbols", "DejaVu Sans Mono", "Noto Color Emoji"];
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(any(target_vendor = "apple", windows, target_os = "android")))]
 pub(super) const SYMBOL_FONT_FILES: &[&str] = &["dejavusans", "notosanssymbols", "notocoloremoji"];
+// Android ships Noto alone; the matcher finds any symbol these lack (`android`).
+#[cfg(target_os = "android")]
+pub(super) const SYMBOL_FAMILIES: &[&str] = &["Noto Sans Symbols", "Noto Color Emoji"];
+#[cfg(target_os = "android")]
+pub(super) const SYMBOL_FONT_FILES: &[&str] = &["notosanssymbols", "notocoloremoji"];
 
 // `Family::SystemMono`: the platform's monospaced UI families, most preferred first, and the
 // files they're in. SF Mono's family name is `.SF NS Mono`, as SF's is `.SF NS`.
@@ -61,10 +70,15 @@ const SYSTEM_MONO_FAMILIES: &[&str] = &["Cascadia Mono", "Consolas", "Courier Ne
 #[cfg(windows)]
 const SYSTEM_MONO_FILES: &[&str] = &["cascadiamono", "consola", "cour"];
 // After fontconfig's own answer (`fontconfig_monospace`).
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(any(target_vendor = "apple", windows, target_os = "android")))]
 const SYSTEM_MONO_FAMILIES: &[&str] = &["DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Ubuntu Mono"];
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(any(target_vendor = "apple", windows, target_os = "android")))]
 const SYSTEM_MONO_FILES: &[&str] = &["dejavusansmono", "liberationmono", "notosansmono", "ubuntumono"];
+// Android's `monospace` family, then the typewriter face it also ships.
+#[cfg(target_os = "android")]
+const SYSTEM_MONO_FAMILIES: &[&str] = &["Droid Sans Mono", "Cutive Mono"];
+#[cfg(target_os = "android")]
+const SYSTEM_MONO_FILES: &[&str] = &["droidsansmono", "cutivemono"];
 
 /// The installed `Family::SystemMono` families, most preferred first, loading their files.
 pub(super) fn load_system_mono(collection: &mut Collection, loaded: &mut LoadedFiles) -> Vec<String> {
@@ -392,8 +406,8 @@ impl TextSystem {
 }
 
 /// The files of the installed family `name` (any of its names, case aside), found through the
-/// platform's own list of fonts: DirectWrite's system collection on Windows, CoreText on macOS
-/// and fontconfig on Linux. The lookup runs in a collection of its own, so the app's collection
+/// platform's own list of fonts: DirectWrite's system collection on Windows, CoreText on macOS,
+/// the NDK's font list on Android and fontconfig on Linux. The lookup runs in a collection of its own, so the app's collection
 /// gains only the files of the families text asks for, and its own families still come first.
 pub(super) fn installed_family_files(name: &str) -> Vec<std::path::PathBuf> {
     platform::family_files(&[name])

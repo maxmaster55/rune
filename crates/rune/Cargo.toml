@@ -141,6 +141,9 @@ fontique = { version = "0.12", default-features = false, features = ["std", "sys
 # The feature is target-only so a desktop build does not pull the glue crate. `research/40-android.md`.
 [target.'cfg(target_os = "android")'.dependencies]
 winit = { version = "0.30.13", default-features = false, features = ["rwh_06", "android-native-activity"] }
+# The system's font list and fallback (`AFontMatcher`, `text/system_fonts/android.rs`). API 29 is
+# the APK's minimum SDK; winit already links this crate.
+ndk = { version = "0.9", default-features = false, features = ["api-level-29"] }
 
 [target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "ios"), not(target_os = "android")))'.dependencies]
 arboard = { version = "3.6", default-features = false, features = ["wayland-data-control"] }

@@ -1,5 +1,6 @@
-//! The hello example as an Android activity: a switch a finger can tap, and a field that asks
-//! for the soft keyboard. The size below is only the first layout, until the surface reports
+//! The hello example as an Android activity: a switch a finger can tap, a field that asks for
+//! the soft keyboard, and a line in scripts the bundled fonts lack, which the system's fallback
+//! fonts draw. It is light or dark as the phone is. The size below is only the first layout, until the surface reports
 //! its real size and density.
 //!
 //! Build and packaging: `research/40-android.md`.
@@ -25,8 +26,9 @@ impl Default for State {
 }
 
 #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
-fn view(s: &State, _: &mut Cx<State>) -> El {
-    let t = tok::theme(true);
+fn view(s: &State, cx: &mut Cx<State>) -> El {
+    let dark = cx.system_dark();
+    let t = tok::theme(dark);
     let label = text(if s.on { "Lights on" } else { "Lights off" })
         .font(type_::TITLE)
         .color(t.text);
@@ -45,7 +47,7 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
         .size(38.0, 22.0)
         .radius(11.0)
         .fill(if s.on {
-            tok::accent(0, true)
+            tok::accent(0, dark)
         } else {
             t.control_off
         })
@@ -57,6 +59,10 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
         .w_full()
         .single_line()
         .on_edit(|s: &mut State| &mut s.note);
+    // Arabic, Devanagari, Japanese and an emoji: none is in Inter.
+    let scripts = text("مرحبا · नमस्ते · こんにちは · 👋")
+        .font(type_::BODY)
+        .color(t.text);
     col()
         .w_full()
         .h_full()
@@ -67,6 +73,7 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
         .child(label)
         .child(switch)
         .child(field)
+        .child(scripts)
 }
 
 /// `NativeActivity` calls this. Bind the activity, then the same `rune::run` a desktop binary uses.

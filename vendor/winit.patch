@@ -395,3 +395,71 @@ index 6d60c1c5..b6713efc 100644
          window
      }
  }
+diff --git a/src/platform_impl/android/mod.rs b/src/platform_impl/android/mod.rs
+index c6a7416..3edffb2 100644
+--- a/src/platform_impl/android/mod.rs
++++ b/src/platform_impl/android/mod.rs
+@@ -143,6 +143,20 @@ pub struct EventLoop<T: 'static> {
+     cause: StartCause,
+     ignore_volume_keys: bool,
+     combining_accent: Option<char>,
++    /// The density and night mode last reported, so `ConfigChanged` reports only a change:
++    /// `android_app.config()` is shared, so an old copy of it would read the new values too.
++    scale_factor: f64,
++    theme: Option<Theme>,
++}
++
++/// The night mode of the activity's configuration as winit's theme; None when it is undefined.
++fn config_theme(app: &AndroidApp) -> Option<Theme> {
++    use android_activity::ndk::configuration::UiModeNight;
++    match app.config().ui_mode_night() {
++        UiModeNight::Yes => Some(Theme::Dark),
++        UiModeNight::No => Some(Theme::Light),
++        _ => None,
++    }
+ }
+ 
+ #[derive(Debug, Clone, PartialEq)]
+@@ -192,6 +206,8 @@ impl<T: 'static> EventLoop<T> {
+             cause: StartCause::Init,
+             ignore_volume_keys: attributes.ignore_volume_keys,
+             combining_accent: None,
++            scale_factor: MonitorHandle::new(android_app.clone()).scale_factor(),
++            theme: config_theme(&android_app),
+         })
+     }
+ 
+@@ -243,10 +259,22 @@ impl<T: 'static> EventLoop<T> {
+                     );
+                 },
+                 MainEvent::ConfigChanged { .. } => {
++                    let theme = config_theme(&self.android_app);
++                    if theme != self.theme {
++                        self.theme = theme;
++                        if let Some(theme) = theme {
++                            let event = event::Event::WindowEvent {
++                                window_id: window::WindowId(WindowId),
++                                event: event::WindowEvent::ThemeChanged(theme),
++                            };
++                            callback(event, self.window_target());
++                        }
++                    }
+                     let monitor = MonitorHandle::new(self.android_app.clone());
+-                    let old_scale_factor = monitor.scale_factor();
++                    let old_scale_factor = self.scale_factor;
+                     let scale_factor = monitor.scale_factor();
+-                    if (scale_factor - old_scale_factor).abs() < f64::EPSILON {
++                    self.scale_factor = scale_factor;
++                    if (scale_factor - old_scale_factor).abs() >= f64::EPSILON {
+                         let new_inner_size = Arc::new(Mutex::new(
+                             MonitorHandle::new(self.android_app.clone()).size(),
+                         ));
+@@ -1030,7 +1058,7 @@ impl Window {
+     pub fn set_theme(&self, _theme: Option<Theme>) {}
+ 
+     pub fn theme(&self) -> Option<Theme> {
+-        None
++        config_theme(&self.app)
+     }
+ 
+     pub fn set_content_protected(&self, _protected: bool) {}
